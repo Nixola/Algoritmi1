@@ -1,5 +1,16 @@
 CC=gcc
-CFLAGS=--std=c11 -Wall -Wextra -Wpedantic -Werror -g
+CFLAGS=--std=c11 -Wall -Wextra -Wpedantic -Werror
 
-hellomake: main.o
-	$(CC) -o main main.o
+debug: CFLAGS += -g
+debug: main.o
+	$(CC) $(CFLAGS) -o Dmain main.o
+
+release: CFLAGS += -O3
+release: main.o
+	$(CC) $(CFLAGS) -o main main.o
+
+benchmark: CFLAGS += -Dbenchmark
+benchmark: release
+
+clean:
+	rm -f main Dmain *.o
