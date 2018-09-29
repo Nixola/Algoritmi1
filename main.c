@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 
 #ifndef _CRT_SECURE_NO_WARNING
 #define _CRT_SECURE_NO_WARNING
@@ -10,17 +11,26 @@
 #define minInt(a, b) (a)<(b)?(a):(b)
 #define maxInt(a, b) (a)>(b)?(a):(b)
 
-#define benchmark
-
 #ifdef benchmark
 #include <time.h>
-#define MEASURE(name, func) {clock_t first=clock();func;clock_t second=clock();fprintf(stderr, "Processor time taken by %s: %ldns\n", name, (second-first)*1000*1000/CLOCKS_PER_SEC);}
+// this macro is used to mark chunks of code that need to be benchmarked.
+// it allows for a single use of ifdef instead of scattering it around.
+#define MEASURE(name, func) \
+{\
+	clock_t first=clock();\
+	func;\
+	clock_t second=clock();\
+	fprintf(stderr, "Processor time taken by %s: %ldns\n", name,\
+		(second-first)*1000*1000/CLOCKS_PER_SEC);\
+}
 #else
 #define MEASURE(name, func) func
 #endif
 
-int** allocSquareMatrix(int side, int defaultValue) {
-	int** matrix = malloc(side * sizeof(int*));
+// allocates a n×n matrix. Complexity is O(n²) if a default value is provided,
+// O(n) otherwise.
+int **allocSquareMatrix(int side, int defaultValue) {
+	int **matrix = malloc(side * sizeof(int*));
 	int i, j;
 	for (i = 0; i < side; i++) {
 		matrix[i] = malloc(side * sizeof(int));
@@ -33,7 +43,8 @@ int** allocSquareMatrix(int side, int defaultValue) {
 	return matrix;
 }
 
-void freeSquareMatrix(int** matrix, int side) {
+// frees a n×n matrix created via allocSquareMatrix. Complexity is O(n) always.
+void freeSquareMatrix(int **matrix, int side) {
 	int i;
 	for (i = 0; i < side; i++) {
 		free(matrix[i]);
@@ -41,31 +52,40 @@ void freeSquareMatrix(int** matrix, int side) {
 	free(matrix);
 }
 
-void swap(int*** a, int*** b) {
-	int** tmp = *a;
+// textbook value swap function
+void swap(int ***a, int ***b) {
+	int **tmp = *a;
 	*a = *b;
 	*b = tmp;
 }
 
-void copy(int** in, int** out, int side) {
-	int i, j;
+// copies the content of a matrix to a new one. Complexity is O(n).
+void copy(int **in, int **out, int side) {
+	int i;
 	for (i = 0; i < side; i++) {
-		for (j = 0; j < side; j++) {
-			out[i][j] = in[i][j];
-		}
+		memcpy(out, in, side * sizeof(int));
 	}
 }
 
-int** floydWarshall(int** input, int nNodes) {
+// Implementation of the Floyd-Warshall algorithm to find the length of the 
+// shortest paths from and to each node, necessary to find the center[s].
+int **floydWarshall(int **input, int nNodes) {
 	int k, i, j;
-	int** matrix 	= input;
-	int** matrixOld	= allocSquareMatrix(nNodes, 0);
+	int **matrix = input;
+	// A second matrix is allocated. As the algorithm only operates on one,
+	// the two are swapped before each iteration to allow fast resource reuse.
+	// Returns the matrix that happened to be used last, freeing the other.
+	int **matrixOld	= allocSquareMatrix(nNodes, 0);
 	for (k = 0; k < nNodes; k++) {
-		swap(&matrix, &matrixOld);
+		swap(&matrix, &matrixOld); // O(n)
 		for (i = 0; i < nNodes; i++) {
 			for (j = 0; j < nNodes; j++) {
-				int partial = (matrixOld[i][k] == INF || matrixOld[k][j] == INF) ? INF : matrixOld[i][k] + matrixOld[k][j];
-				matrix[i][j] = minInt(matrixOld[i][j], partial);
+				// if either partial path hasn't been found yet, return max cost
+				// otherwise, return the sum of the partial paths.
+				int partial = 
+					(matrixOld[i][k] == INF || matrixOld[k][j] == INF) ? INF :
+					matrixOld[i][k] + matrixOld[k][j];
+				matrix[i][j] = minInt(matrixOld[i][j], partial); // O(n³)
 			}
 		}
 	}
@@ -73,7 +93,9 @@ int** floydWarshall(int** input, int nNodes) {
 	return matrix;
 }
 
-int findEccentricity(int** matrix, int* eccentricity, int nNodes) {
+// Calculates the ecc. of each node by searching for the longest path from each.
+// Stores them in a provided array and returns the minimum found.
+int findEccentricity(int **matrix, int *eccentricity, int nNodes) {
 	int i, j, minEcc = INF;
 	for (i = 0; i < nNodes; i++) {
 		int max = matrix[i][0];
@@ -86,7 +108,9 @@ int findEccentricity(int** matrix, int* eccentricity, int nNodes) {
 	return minEcc;
 }
 
-int findCenters(int* eccentricity, int* centers, int nNodes, int minEcc) {
+// Given the minimum eccentricity of the graph, finds out what the nodes with
+// said eccentricity are. Returns the amount of centers found.
+int findCenters(int *eccentricity, int *centers, int nNodes, int minEcc) {
 	int i, nCenters = 0;
 	for (i = 0; i < nNodes; i++) {
 		if (eccentricity[i] == minEcc) {
@@ -96,18 +120,19 @@ int findCenters(int* eccentricity, int* centers, int nNodes, int minEcc) {
 	return nCenters;
 }
 
-int main(int argC, char** argV) {
+int main(int argC, char **argV) {
 	if (argC != 3) {
+		// Incorrect usage
 		printf("Nope\n");
 		return -1;
 	}
-	char* inputFile = argV[1];
-	char* outputFile = argV[2];
+	char *inputFile = argV[1];
+	char *outputFile = argV[2];
 	int nNodes, nArcs;
-	FILE* file;
-	int** matrix;
-	int* eccentricity;
-	int* centers;
+	FILE *file;
+	int **matrix;
+	int *eccentricity;
+	int *centers;
 	int nCenters;
 
 	if ((file = fopen(inputFile, "r"))) {
@@ -117,7 +142,14 @@ int main(int argC, char** argV) {
 		return -2;
 	}
 
-	MEASURE("matrix allocation", matrix = allocSquareMatrix(nNodes, INF));
+	#ifdef benchmark
+	fprintf(stderr, 
+		"Loading file %s. Number of nodes: %d. Number of arcs: %d.\n",
+		inputFile, nNodes, nArcs);
+	#endif
+
+	// O(n²)
+	MEASURE("matrix allocation O(n²)", matrix = allocSquareMatrix(nNodes, INF));
 	
 	for (int n = 0; n < nArcs; n++) {
 		int i, j, val;
@@ -133,15 +165,22 @@ int main(int argC, char** argV) {
 		matrix[i][i] = 0;
 	}
 
-	MEASURE("Floyd-Warshall algorithm", matrix = floydWarshall(matrix, nNodes));
+	// O(n³)
+	MEASURE("Floyd-Warshall algorithm O(n³)", 
+		matrix = floydWarshall(matrix, nNodes));
 
-	MEASURE("eccentricity calculation", eccentricity = malloc(nNodes * sizeof(int)));
+	eccentricity = malloc(nNodes * sizeof(int));
 	centers = malloc(nNodes * sizeof(int));
 
-	MEASURE("finding centers", nCenters = findCenters(eccentricity, centers, nNodes, findEccentricity(matrix, eccentricity, nNodes)));
+	// O(n²)
+	MEASURE("finding centers O(n²)", 
+		nCenters = findCenters(eccentricity, centers, nNodes, 
+			findEccentricity(matrix, eccentricity, nNodes)));
 
 	if (!(file = fopen(outputFile, "w"))) {
-		fprintf(stderr, "Couldn't open output file \"%s\". Falling back to stdout.\n", outputFile);
+		fprintf(stderr,
+			"Couldn't open output file \"%s\". Falling back to stdout.\n",
+			outputFile);
 		file = stdout;
 	}
 
