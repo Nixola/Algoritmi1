@@ -20,7 +20,7 @@
 	clock_t first=clock();\
 	func;\
 	clock_t second=clock();\
-	fprintf(stderr, "Processor time taken by %s: %ldns\n", name,\
+	fprintf(stderr, "Processor time taken by %s: %ldmicroseconds\n", name,\
 		(second-first)*1000*1000/CLOCKS_PER_SEC);\
 }
 #else
